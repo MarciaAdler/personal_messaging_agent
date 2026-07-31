@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.env
+.env.local
+clara.db
+scripts/client_secret*.json
+.DS_Store

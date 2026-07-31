@@ -1,0 +1,12 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+apscheduler==3.10.4
+anthropic==0.69.0
+twilio==9.3.2
+requests==2.32.3
+sqlalchemy==2.0.35
+pg8000==1.31.5
+google-auth==2.34.0
+google-auth-oauthlib==1.2.1
+google-api-python-client==2.145.0
+python-multipart==0.0.9
