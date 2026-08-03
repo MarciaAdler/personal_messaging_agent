@@ -35,6 +35,59 @@ def terms_of_service():
     return Response(content=TERMS_HTML, media_type="text/html")
 
 
+@app.get("/consent")
+def consent_form():
+    return Response(content=_consent_form_html(), media_type="text/html")
+
+
+@app.post("/consent")
+async def consent_submit(request: Request):
+    form = await request.form()
+    phone = (form.get("phone") or "").strip()
+    agreed = form.get("consent") == "on"
+
+    if not phone or not agreed:
+        return Response(
+            content=_consent_form_html(error="Please enter a phone number and check the consent box."),
+            media_type="text/html",
+            status_code=400,
+        )
+
+    db.save_consent(phone)
+    return Response(content=CONSENT_THANKYOU_HTML, media_type="text/html")
+
+
+def _consent_form_html(error: str = "") -> str:
+    error_html = f'<p style="color:#b00020;">{_xml_escape(error)}</p>' if error else ""
+    return f"""<!doctype html>
+<title>Clara Agent - SMS Consent</title>
+<h1>Text Message Consent</h1>
+<p>Clara is a personal automation assistant that sends scheduled text message reminders
+(calendar events and to-do items) to its owner's phone number.</p>
+{error_html}
+<form method="post" action="/consent">
+  <label for="phone">Phone number</label><br>
+  <input type="tel" id="phone" name="phone" placeholder="+15551234567" required><br><br>
+  <label>
+    <input type="checkbox" name="consent" required>
+    I agree to receive automated SMS text messages from Clara, including calendar and
+    to-do reminders. Message frequency varies. Message and data rates may apply.
+    Reply STOP at any time to stop receiving messages, or HELP for help.
+  </label><br><br>
+  <button type="submit">Submit</button>
+</form>
+<p>See our <a href="/privacy">Privacy Policy</a> and <a href="/terms">Terms of Service</a>.</p>
+"""
+
+
+CONSENT_THANKYOU_HTML = """<!doctype html>
+<title>Clara Agent - Thanks</title>
+<h1>Thanks!</h1>
+<p>You're opted in to receive text messages from Clara. Reply STOP at any time to stop
+receiving messages, or HELP for help.</p>
+"""
+
+
 PRIVACY_POLICY_HTML = """<!doctype html>
 <title>Clara Agent - Privacy Policy</title>
 <h1>Privacy Policy</h1>

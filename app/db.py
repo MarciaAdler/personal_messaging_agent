@@ -60,3 +60,21 @@ def get_last_list():
         return json.loads(row.items_json)
     finally:
         session.close()
+
+
+class ConsentRecord(Base):
+    """Audit trail of SMS opt-in submissions from the /consent form."""
+    __tablename__ = "consent_records"
+    id = Column(Integer, primary_key=True)
+    phone_number = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+def save_consent(phone_number):
+    session = SessionLocal()
+    try:
+        row = ConsentRecord(phone_number=phone_number)
+        session.add(row)
+        session.commit()
+    finally:
+        session.close()
