@@ -62,24 +62,44 @@ catching the specific mistakes people commonly make at each step.
      and OTP verification via a real US/Canada mobile number (not a VoIP number). Cost: ~$4
      one-time.
    - Has an EIN: register a **Standard** Brand, then a **Low Volume Standard** Campaign.
-4. For the Campaign form (whichever Brand type), help them fill in:
-   - Use case type: **Mixed** (it both pushes scheduled reminders and handles two-way replies).
-   - Campaign description, sample messages, consent/message-flow description: draft
-     plain-ASCII text (no em dashes, no smart quotes/curly apostrophes -- these have caused
-     silent-garbling validation failures before). Describe the real flow: a single-recipient
-     personal app, the recipient is the app's own owner, who configured their own number
-     directly; no public opt-in form. Opt-in method to check: **"Other"**.
-   - Privacy policy / terms links: these will be `https://<railway-domain>/privacy` and
-     `/terms`, which the app already serves (see `app/main.py`) -- fill in once Railway is
-     deployed (Phase 6).
+4. For the Campaign form, use the known-good template in the "A2P 10DLC campaign template"
+   section of `README.md` -- it's the exact field wording (with placeholders swapped for
+   this user's own name/app name/domain) that got this app's own campaign approved, after
+   three earlier rejections. It took real trial and error to land on this wording, so treat
+   deviations from the template as a likely source of a fresh rejection:
+   - **Rejection 1**: the campaign description itself didn't meet Twilio's content
+     standards -- it included personal information. Fixed by keeping the description and
+     sample messages strictly generic/functional (what the app does, how consent works),
+     not real personal details beyond the operator's name and the app's purpose.
+   - **Rejection 2**: the consent checkbox on `/consent` was `required`, so the form
+     couldn't be submitted without checking it -- Twilio reads that as consent not being a
+     free choice. Fixed in code (`app/main.py`) -- the checkbox is now optional to submit
+     but still required to actually opt in (unchecked submissions record no consent, send
+     no SMS). Don't re-add `required` to that checkbox, or the campaign description (which
+     now describes it as optional-to-submit) will stop matching actual behavior.
+   - **Rejection 3**: none of the submitted sample messages included a standard opt-out
+     keyword. Fixed by including "Reply STOP to opt out" in at least one sample message --
+     the template's sample message #1 already has this baked in.
+   - Use case type: `SOLE_PROPRIETOR` for a Sole Proprietor Brand, `Mixed` for a Standard
+     Brand.
+   - Opt-in method to check: **Web Form**, pointing at `https://<railway-domain>/consent`
+     (the app already serves this page, backed by a real consent record in Postgres --
+     see `app/main.py` / `app/db.py`). Fill in the real Railway domain once deployed
+     (Phase 6) if not known yet.
+   - Draft all free-text fields in plain ASCII (no em dashes, no smart quotes/curly
+     apostrophes) -- these have caused silent-garbling validation failures before.
+   - Privacy policy / terms links: `https://<railway-domain>/privacy` and `/terms`, which
+     the app already serves (see `app/main.py`) -- fill in once Railway is deployed
+     (Phase 6).
 5. **Critical, commonly missed step:** registering a Brand and Campaign does NOT
    automatically attach them to the phone number. Create a **Messaging Service** (Console ->
    Messaging -> Services), add the number to its **Sender Pool**, and attach the approved
    Campaign to it under the service's Compliance tab. Without this, sends fail with error
    30034 ("Message from an Unregistered Number") even after the Campaign is approved.
-6. Tell them vetting takes 1-7 business days and they can continue with the rest of setup
-   while waiting -- replies to messages they send Clara first work immediately regardless of
-   campaign status; only the unprompted scheduled 8am/5pm/9pm texts need the campaign live.
+6. Tell them vetting takes 1-7 business days, and campaign approval is **not optional** --
+   Twilio won't reliably send any outbound message, scheduled or
+   reply, from an unregistered number. They can continue with the rest of setup while
+   waiting, but Clara won't be usable end to end until the campaign shows "Approved."
 
 ## Phase 3: Google Calendar (read-only)
 
@@ -150,19 +170,27 @@ in `.env.example` has a value before moving to deployment.
    already binds to `$PORT` dynamically.
 6. Once live, go back to Twilio: set the number's (or Messaging Service's) "when a message
    comes in" webhook to the **full URL** `https://<railway-domain>/webhook/sms`, method POST
-   -- the path alone isn't enough, Twilio needs the whole domain.
+   -- the path alone isn't enough, Twilio needs the whole domain. Note: the webhook will
+   fire and Clara will generate a reply even before the A2P campaign is approved, but Twilio
+   won't actually deliver that reply back to the user's phone until the campaign shows
+   "Approved" -- don't mistake a missing reply for a broken webhook while waiting on
+   approval.
 7. Fill the real Railway domain into the privacy/terms links in the Twilio Campaign form from
    Phase 2 if not already done.
 
 ## Phase 7: Test end to end
 
-1. Text the Twilio number something like "what's outstanding?" -- should get a real reply
-   using live Notion + Calendar data. This works immediately regardless of A2P campaign status.
-2. Manually fire scheduled jobs without waiting for the actual time:
+1. Confirm the A2P campaign shows "Approved" in the Twilio Console before expecting any
+   outbound send (reply or scheduled) to reliably deliver -- this isn't optional, see
+   Phase 2.
+2. Text the Twilio number something like "what's outstanding?" -- should get a real reply
+   using live Notion + Calendar data.
+3. Manually fire scheduled jobs without waiting for the actual time:
    `curl -X POST https://<railway-domain>/trigger/morning` (and `/trigger/afternoon`,
    `/trigger/evening`).
-3. Remind them: the unprompted scheduled texts (8am/5pm/9pm) won't deliver until the A2P
-   campaign shows "Approved" -- that's expected, not a bug, if everything else above works.
+4. If sends fail even with an approved campaign, check that the Messaging
+   Service/Sender Pool/Compliance attachment from Phase 2 step 5 was actually done --
+   that's the other common cause of silent send failures post-approval.
 
 ---
 
@@ -180,3 +208,11 @@ in `.env.example` has a value before moving to deployment.
 - `get_google_refresh_token.py` used to hardcode a relative `client_secret.json` path that
   broke depending on which directory you ran it from -- fixed to resolve relative to the
   script's own location.
+- A2P 10DLC campaign got rejected three times before approval: once because the campaign
+  description itself included personal information and didn't meet Twilio's content
+  standards, once because the `/consent` checkbox was `required` (blocked form submission
+  unless checked -- not a free opt-in choice), and once because no submitted sample message
+  included opt-out language ("Reply STOP"). All three are fixed in code and in the campaign
+  template in `README.md` -- see Phase 2 above. It took real trial and error to land on
+  wording Twilio would approve, so if a user's own resubmission gets rejected again, it
+  likely means they deviated from that template.

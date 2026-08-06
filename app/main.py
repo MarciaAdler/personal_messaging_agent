@@ -46,14 +46,27 @@ async def consent_submit(request: Request):
     phone = (form.get("phone") or "").strip()
     agreed = form.get("consent") == "on"
 
-    if not phone or not agreed:
+    if not phone:
         return Response(
-            content=_consent_form_html(error="Please enter a phone number and check the consent box."),
+            content=_consent_form_html(error="Please enter a phone number."),
             media_type="text/html",
             status_code=400,
         )
 
+    if not agreed:
+        return Response(content=CONSENT_DECLINED_HTML, media_type="text/html")
+
     db.save_consent(phone)
+
+    if phone == settings.MY_PHONE_NUMBER:
+        try:
+            sms.send_message(
+                "Welcome to Clara! You'll get daily schedule reminders by text. "
+                "Reply STOP to unsubscribe, HELP for help. Msg&data rates may apply."
+            )
+        except Exception as e:
+            log.error("Failed to send opt-in confirmation SMS: %s", e)
+
     return Response(content=CONSENT_THANKYOU_HTML, media_type="text/html")
 
 
@@ -69,7 +82,7 @@ def _consent_form_html(error: str = "") -> str:
   <label for="phone">Phone number</label><br>
   <input type="tel" id="phone" name="phone" placeholder="+15551234567" required><br><br>
   <label>
-    <input type="checkbox" name="consent" required>
+    <input type="checkbox" name="consent">
     I agree to receive automated SMS text messages from Clara, including calendar and
     to-do reminders. Message frequency varies. Message and data rates may apply.
     Reply STOP at any time to stop receiving messages, or HELP for help.
@@ -87,6 +100,12 @@ CONSENT_THANKYOU_HTML = """<!doctype html>
 receiving messages, or HELP for help.</p>
 """
 
+CONSENT_DECLINED_HTML = """<!doctype html>
+<title>Clara Agent - Submitted</title>
+<h1>Got it!</h1>
+<p>Your submission was received. Since the SMS consent box wasn't checked, you have not
+been opted in to receive text messages from Clara.</p>
+"""
 
 PRIVACY_POLICY_HTML = """<!doctype html>
 <title>Clara Agent - Privacy Policy</title>
@@ -155,12 +174,12 @@ def _xml_escape(text: str) -> str:
 
 
 def handle_incoming_message(user_text: str) -> str:
-    open_todos = db.get_last_list()
-    if not open_todos:
-        # No cached list yet (e.g. fresh deploy) -- pull fresh from Notion.
-        fresh = notion_todo.get_all_open_todos()
-        open_todos = [{"num": i + 1, **t} for i, t in enumerate(fresh)]
-        db.save_last_list(open_todos)
+    # Always pull the full open list fresh (not just today's/tomorrow's scheduled-job
+    # subset) so on-demand questions about any date, and "mark N done", both resolve
+    # correctly regardless of what the last scheduled message showed.
+    fresh = notion_todo.get_all_open_todos()
+    open_todos = [{"num": i + 1, **t} for i, t in enumerate(fresh)]
+    db.save_last_list(open_todos)
 
     remaining_events = google_calendar.get_events_remaining_today()
 

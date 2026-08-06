@@ -14,7 +14,7 @@ def _numbered(todos):
 def morning_job():
     today = datetime.date.today()
     events = google_calendar.get_events_for_date(today)
-    todos = notion_todo.get_open_todos(due_on_or_before=today)
+    todos = notion_todo.get_open_todos(due_date=today)
     numbered = _numbered(todos)
     db.save_last_list(numbered)
     message = agent_brain.compose_daily_message("morning", events, numbered)
@@ -23,7 +23,8 @@ def morning_job():
 
 
 def afternoon_job():
-    todos = notion_todo.get_all_open_todos()
+    today = datetime.date.today()
+    todos = notion_todo.get_open_todos(due_date=today)
     numbered = _numbered(todos)
     db.save_last_list(numbered)
     message = agent_brain.compose_daily_message("afternoon", [], numbered)
@@ -34,7 +35,10 @@ def afternoon_job():
 def evening_job():
     tomorrow = datetime.date.today() + datetime.timedelta(days=1)
     events = google_calendar.get_events_for_date(tomorrow)
-    message = agent_brain.compose_daily_message("evening", events, [])
+    todos = notion_todo.get_open_todos(due_date=tomorrow)
+    numbered = _numbered(todos)
+    db.save_last_list(numbered)
+    message = agent_brain.compose_daily_message("evening", events, numbered)
     sms.send_message(message)
     log.info("Sent evening message")
 

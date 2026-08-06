@@ -22,16 +22,16 @@ def _status_filter_not_done():
     }
 
 
-def get_open_todos(due_on_or_before: datetime.date = None):
+def get_open_todos(due_date: datetime.date = None):
     """
-    Returns open (not-done) to-do items, optionally filtered to items due on/before a date.
+    Returns open (not-done) to-do items, optionally filtered to items due exactly on due_date.
     Each item: {"page_id": ..., "title": ..., "due_date": "YYYY-MM-DD" or None}
     """
     filters = [_status_filter_not_done()]
-    if due_on_or_before:
+    if due_date:
         filters.append({
             "property": settings.NOTION_DUE_DATE_PROP,
-            "date": {"on_or_before": due_on_or_before.isoformat()},
+            "date": {"equals": due_date.isoformat()},
         })
 
     payload = {"filter": {"and": filters}} if len(filters) > 1 else {"filter": filters[0]}
@@ -48,8 +48,8 @@ def get_open_todos(due_on_or_before: datetime.date = None):
 
 
 def get_all_open_todos():
-    """All open to-dos regardless of due date (used for the 5pm outstanding check and on-demand queries)."""
-    return get_open_todos(due_on_or_before=None)
+    """All open to-dos regardless of due date (used for on-demand queries, which filter by date themselves)."""
+    return get_open_todos(due_date=None)
 
 
 def _parse_page(page):

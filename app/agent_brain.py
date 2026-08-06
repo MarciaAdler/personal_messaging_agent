@@ -31,7 +31,9 @@ Rules:
 - If the user references a to-do by its reference number (e.g. "mark 2 done", "finished #3"), map it to the correct page_id using the provided list.
 - If the user describes a completed task in words (e.g. "I finished the client report"), match it against the open to-do titles as best you can. If genuinely ambiguous or no match, set intent to "chat" and ask a clarifying question in "reply".
 - If the user asks to add something ("add: call the dentist tomorrow", "remind me to buy milk"), set intent "add_item", extract a clean title, and a due_date only if one is clearly implied (else null).
-- If the user asks what's outstanding / what's left / what's on my plate, set intent "query_outstanding" and write a reply summarizing the provided open items and remaining calendar events.
+- If the user asks what's outstanding / what's left / what's on my plate, with no date mentioned, set intent "query_outstanding" and in "reply" list ONLY the open to-do items whose due date is today (today's date is given below). Do not mention items due on other dates, even though you can see them in the list.
+- If the user asks about a specific day instead (e.g. "what do I have due tomorrow", "what's due Friday", "anything due 8/12"), set intent "query_outstanding" and in "reply" list ONLY the open to-do items whose due date matches that day. Work out the target date from today's date given below.
+- If the user explicitly asks for everything / all outstanding items regardless of date, set intent "query_outstanding" and list all open to-do items provided, each with its due date.
 - Keep replies concise and conversational, suitable for a text message. Use the person's actual item titles, not the reference numbers, when confirming completions.
 """
 
@@ -63,7 +65,9 @@ def interpret_message(user_text: str, open_todos: list, remaining_events: list) 
     open_todos: list of dicts with num, page_id, title, due_date
     remaining_events: list of dicts from google_calendar module
     """
-    user_prompt = f"""Open to-do items:
+    user_prompt = f"""Today's date: {datetime.date.today().isoformat()}
+
+Open to-do items:
 {_format_todos(open_todos)}
 
 Remaining calendar events today:
@@ -102,9 +106,9 @@ def compose_daily_message(kind: str, events: list, todos: list) -> str:
     """
     try:
         prompts = {
-            "morning": "Write a brief, warm good-morning text message summarizing today's calendar events and today's open to-do items. Sign off as Clara.",
-            "afternoon": "Write a brief 5pm text check-in listing only the to-do items still outstanding (not completed). If none are outstanding, congratulate the user. Sign off as Clara.",
-            "evening": "Write a brief 9pm text preview of tomorrow's calendar events. If there are none, say so simply. Sign off as Clara.",
+            "morning": "Write a brief, warm good-morning text message summarizing today's calendar events and today's to-do items (all provided items are due today). Sign off as Clara.",
+            "afternoon": "Write a brief 5pm text check-in listing the to-do items due today that are still outstanding (not completed; all provided items are due today). If none are outstanding, congratulate the user. Sign off as Clara.",
+            "evening": "Write a brief 9pm text preview of tomorrow: tomorrow's calendar events and tomorrow's to-do items (all provided items are due tomorrow). If there's nothing on either, say so simply. Sign off as Clara.",
         }
         user_prompt = f"""{prompts[kind]}
 
