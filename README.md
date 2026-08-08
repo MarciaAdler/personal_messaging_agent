@@ -124,15 +124,25 @@ Run this part on your own computer, not on Railway, since it needs a one-time br
 
 1. Go to https://console.cloud.google.com/, create a project.
 2. Enable the **Google Calendar API** (APIs & Services > Library).
-3. Go to APIs & Services > OAuth consent screen. Choose "External," fill in minimal info,
-   and add your own Google account under "Test users." (Staying in "Testing" mode is fine
-   — no Google review needed for personal use.)
-4. Go to APIs & Services > Credentials > Create Credentials > OAuth client ID > "Desktop app."
+3. Set up the OAuth consent screen. Google reshuffles this menu's exact location
+   periodically, so rather than following a specific click-path, use the search bar at the
+   top of the Cloud Console and search **"Audience"** (or "OAuth consent screen") to jump
+   straight to it. Choose "External," fill in minimal info, and add your own Google account
+   under "Test users."
+4. **On that same Audience page, click "Publish App"** to move from "Testing" to "In
+   production" status instead of leaving it in Testing. This matters more than it looks:
+   Google hard-expires refresh tokens issued to Testing-mode apps after **7 days**, no
+   matter how often they're used — Clara's scheduled jobs will silently start failing on
+   Google Calendar every week if you skip this. Publishing to production for a read-only
+   Calendar scope, with just yourself as a user, doesn't require Google's verification
+   review — you may see an "unverified app" warning the next time you authorize, which is
+   expected; click through it since it's your own app.
+5. Go to APIs & Services > Credentials > Create Credentials > OAuth client ID > "Desktop app."
    Download the JSON as `client_secret.json`.
-5. On your computer: `pip install google-auth-oauthlib`, put `client_secret.json` in the
+6. On your computer: `pip install google-auth-oauthlib`, put `client_secret.json` in the
    `scripts/` folder, then run `python scripts/get_google_refresh_token.py`. Approve access
    in the browser window that opens.
-6. Copy the printed `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN`
+7. Copy the printed `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN`
    into your Railway environment variables.
 
 ## Step 4: Notion

@@ -1,8 +1,7 @@
 import json
 import logging
-import datetime
 import anthropic
-from app.config import settings
+from app.config import settings, local_today
 
 log = logging.getLogger("clara.agent_brain")
 _client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
@@ -39,6 +38,8 @@ Rules:
 
 
 def _format_todos(open_todos):
+    if open_todos is None:
+        return "(couldn't load to-dos right now -- Notion may be unavailable)"
     if not open_todos:
         return "(none)"
     lines = []
@@ -49,6 +50,8 @@ def _format_todos(open_todos):
 
 
 def _format_events(events):
+    if events is None:
+        return "(couldn't load calendar right now -- Google Calendar may be unavailable)"
     if not events:
         return "(none)"
     lines = []
@@ -65,7 +68,7 @@ def interpret_message(user_text: str, open_todos: list, remaining_events: list) 
     open_todos: list of dicts with num, page_id, title, due_date
     remaining_events: list of dicts from google_calendar module
     """
-    user_prompt = f"""Today's date: {datetime.date.today().isoformat()}
+    user_prompt = f"""Today's date: {local_today().isoformat()}
 
 Open to-do items:
 {_format_todos(open_todos)}
@@ -116,12 +119,14 @@ Calendar events:
 {_format_events(events)}
 
 To-do items:
-{_format_todos(todos) if todos else '(none)'}
+{_format_todos(todos)}
 """
         resp = _client.messages.create(
             model=settings.CLARA_MODEL,
             max_tokens=400,
-            system="You are Clara, a warm and concise personal assistant writing a text message.",
+            system="You are Clara, a warm and concise personal assistant writing a text message. "
+            "If a section below says it couldn't load, briefly mention that it's temporarily "
+            "unavailable rather than implying there's simply nothing there.",
             messages=[{"role": "user", "content": user_prompt}],
         )
         return "".join(block.text for block in resp.content if block.type == "text").strip()

@@ -1,4 +1,6 @@
 import os
+import datetime
+from zoneinfo import ZoneInfo
 
 class Settings:
     # --- Anthropic ---
@@ -36,3 +38,11 @@ class Settings:
     PORT = int(os.environ.get("PORT", "8080"))
 
 settings = Settings()
+
+
+def local_today() -> datetime.date:
+    """Today's date in settings.TIMEZONE, not the server/container's own system
+    timezone (which on Railway is UTC) -- matters for anything computed in the
+    evening, since US Eastern evenings fall after UTC has already rolled to the
+    next calendar date."""
+    return datetime.datetime.now(ZoneInfo(settings.TIMEZONE)).date()

@@ -110,23 +110,41 @@ browser login.
 2. **Enable the Calendar API explicitly**: APIs & Services -> Library -> search "Google
    Calendar API" -> Enable. (Easy to skip -- creating the project alone does NOT enable it,
    and the resulting error only surfaces later, mid-webhook-call, as a confusing 403.)
-3. Configure the consent screen: in newer Cloud Console UI this is under **APIs & Services ->
-   Google Auth Platform** (three tabs: Branding, Audience, Clients -- this replaced the old
-   single-page "OAuth consent screen"). Under **Audience**, add the user's own Google account
-   email as a **Test user**. Being the project owner does NOT substitute for this -- it's a
-   separate explicit list Google checks regardless of IAM role.
-4. Under Clients, create an OAuth client ID, type "Desktop app," download the JSON.
-5. Have the user save it as `scripts/client_secret.json` (any filename works since
+3. Configure the consent screen. Google reshuffles this menu's exact location periodically
+   (it's lived under different paths across Cloud Console redesigns), so don't hand the
+   user a fixed click-path -- have them use the search bar at the top of the Cloud Console
+   and search **"Audience"** (or "OAuth consent screen") to jump straight to the right page
+   regardless of current layout. Add the user's own Google account email as a **Test
+   user**. Being the project owner does NOT substitute for this -- it's a separate explicit
+   list Google checks regardless of IAM role.
+4. **Critical, easy to skip:** on that same Audience page, click **Publish App** to move
+   publishing status from "Testing" to "In production." Do not leave it in Testing --
+   Google hard-expires refresh tokens issued to Testing-mode apps after **7 days**
+   regardless of use, which silently breaks Clara's scheduled Calendar fetches about a week
+   after setup (Railway logs show `google.auth.exceptions.RefreshError: invalid_grant: Token
+   has been expired or revoked`). For a read-only Calendar scope with only the user
+   themselves as a test user, publishing to production does not require Google's
+   verification review -- they'll see an "unverified app" warning on next authorization,
+   which is expected; have them click through it (it's their own app).
+5. Search **"Credentials"** to get to APIs & Services > Credentials, then create an OAuth
+   client ID, type "Desktop app," download the JSON.
+6. Have the user save it as `scripts/client_secret.json` (any filename works since
    `get_google_refresh_token.py` resolves the path relative to its own location, but this
    name matches what's git-ignored already via `scripts/client_secret*.json`).
-6. Run (or have them run) from repo root: `pip3 install -r requirements.txt` if not already
+7. Run (or have them run) from repo root: `pip3 install -r requirements.txt` if not already
    done, then have **the user themselves** run `python3 scripts/get_google_refresh_token.py`
    in their own terminal -- it opens a real browser for login and prints
    `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REFRESH_TOKEN` to their terminal, not the
    browser. Have them copy those three into `.env` themselves.
-7. If they get `Error 403: access_denied` / "has not completed verification": they weren't
+8. If they get `Error 403: access_denied` / "has not completed verification": they weren't
    added as a Test user in the right project, or logged in with a different Google account
    than the one they added -- send them back to step 3.
+9. If Calendar fetches start failing weeks later with `invalid_grant: Token has been expired
+   or revoked` in the logs: either step 4 was skipped (app still in Testing), or the user
+   revoked access from their Google Account permissions page. Fix is the same either way --
+   rerun `python3 scripts/get_google_refresh_token.py` locally for a fresh
+   `GOOGLE_REFRESH_TOKEN`, update it in Railway, and confirm the app is published to
+   production so it doesn't recur every 7 days.
 
 ## Phase 4: Notion
 
@@ -216,3 +234,23 @@ in `.env.example` has a value before moving to deployment.
   template in `README.md` -- see Phase 2 above. It took real trial and error to land on
   wording Twilio would approve, so if a user's own resubmission gets rejected again, it
   likely means they deviated from that template.
+- Scheduled jobs (`morning_job`/`afternoon_job`/`evening_job` in `app/scheduler.py`) went
+  silent one week after initial setup because the app was left in Google OAuth "Testing"
+  status -- Google hard-expires those refresh tokens after 7 days, and the resulting
+  `RefreshError: invalid_grant` on the Calendar call took down the *entire* scheduled
+  message (to-dos included), not just the calendar portion, since there was no error
+  handling around it. Fixed two ways: Phase 3 above now has the user publish to production
+  so the token doesn't expire weekly, and `scheduler.py` now catches Calendar/Notion
+  failures per-source (`_safe_events`/`_safe_todos`) so a single source being down still
+  lets the message send with the other source's data, calling out honestly in the text that
+  one part "couldn't load" rather than implying there's simply nothing there.
+- The 9pm preview once showed the *day-after*-tomorrow's events instead of tomorrow's
+  (only the evening job, not morning/afternoon). Cause: `datetime.date.today()` reads the
+  container's system clock, which on Railway is UTC, not `settings.TIMEZONE`
+  (America/New_York) -- at 9pm ET it's already past midnight UTC, so "today" had silently
+  rolled to the next calendar date before `+ timedelta(days=1)` ran. Morning/afternoon don't
+  cross that UTC midnight boundary, which is why only evening was affected, but the same bug
+  also affected `agent_brain.py`'s "today's date" for on-demand text queries sent between
+  8pm-midnight ET. Fixed with `local_today()` in `app/config.py`, which resolves "today"
+  via `zoneinfo` in `settings.TIMEZONE` -- use that instead of `datetime.date.today()`
+  anywhere "today"/"tomorrow" matters, don't reintroduce a bare `date.today()` call.
