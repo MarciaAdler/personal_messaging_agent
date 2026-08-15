@@ -137,6 +137,11 @@ Run this part on your own computer, not on Railway, since it needs a one-time br
    Calendar scope, with just yourself as a user, doesn't require Google's verification
    review — you may see an "unverified app" warning the next time you authorize, which is
    expected; click through it since it's your own app.
+
+   **Do this before step 6 below, not after.** The 7-day expiry is baked into a token at the
+   moment Google issues it — publishing to production only prevents the *next* token you
+   generate from expiring, it does not retroactively fix a token you already have. If you
+   generate your token first and publish afterward, that token is still on a 7-day clock.
 5. Go to APIs & Services > Credentials > Create Credentials > OAuth client ID > "Desktop app."
    Download the JSON as `client_secret.json`.
 6. On your computer: `pip install google-auth-oauthlib`, put `client_secret.json` in the
@@ -144,6 +149,15 @@ Run this part on your own computer, not on Railway, since it needs a one-time br
    in the browser window that opens.
 7. Copy the printed `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN`
    into your Railway environment variables.
+
+**If Calendar fetches ever start failing later** with `invalid_grant: Token has been expired
+or revoked` in your Railway logs: first go back to the Audience page in Google Cloud Console
+and confirm it still says "In production" (not "Testing" — Google can also revoke Testing
+status in some cases, and if you ever created a fresh consent screen it defaults back to
+Testing). Once you've confirmed production status, *then* rerun
+`python scripts/get_google_refresh_token.py` for a fresh `GOOGLE_REFRESH_TOKEN` and update it
+in Railway. Doing this in the other order (regenerating before confirming production status)
+will leave you with another token that expires in 7 days.
 
 ## Step 4: Notion
 

@@ -141,10 +141,13 @@ browser login.
    than the one they added -- send them back to step 3.
 9. If Calendar fetches start failing weeks later with `invalid_grant: Token has been expired
    or revoked` in the logs: either step 4 was skipped (app still in Testing), or the user
-   revoked access from their Google Account permissions page. Fix is the same either way --
-   rerun `python3 scripts/get_google_refresh_token.py` locally for a fresh
-   `GOOGLE_REFRESH_TOKEN`, update it in Railway, and confirm the app is published to
-   production so it doesn't recur every 7 days.
+   revoked access from their Google Account permissions page. **Order matters for the fix --
+   confirm/set production status on the Audience page FIRST, then rerun
+   `python3 scripts/get_google_refresh_token.py`.** The 7-day expiry is fixed at the moment a
+   token is issued; regenerating the token before confirming production status just produces
+   another token on the same 7-day clock, which is a common trap since it looks like it
+   worked (no error, sends fine for a week) and then fails again. Update the new
+   `GOOGLE_REFRESH_TOKEN` in Railway and redeploy once the order is confirmed correct.
 
 ## Phase 4: Notion
 
@@ -244,6 +247,12 @@ in `.env.example` has a value before moving to deployment.
   failures per-source (`_safe_events`/`_safe_todos`) so a single source being down still
   lets the message send with the other source's data, calling out honestly in the text that
   one part "couldn't load" rather than implying there's simply nothing there.
+  **This recurred even after the above fix**, because publishing to production only stops
+  the *next* generated token from expiring -- it doesn't retroactively fix a token that was
+  already issued while still in Testing. Someone who regenerates their token and only
+  afterward confirms/sets production status ends up with a new token still on the 7-day
+  clock, and it looks fine for a week before failing again. Phase 3 step 9 above now calls
+  out that the order is publish-first-then-generate, not the other way around.
 - The 9pm preview once showed the *day-after*-tomorrow's events instead of tomorrow's
   (only the evening job, not morning/afternoon). Cause: `datetime.date.today()` reads the
   container's system clock, which on Railway is UTC, not `settings.TIMEZONE`
