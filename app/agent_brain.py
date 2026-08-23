@@ -138,6 +138,8 @@ def _fallback_message(kind, events, todos):
     if kind == "morning":
         return f"Good morning! Here's today:\n\nCalendar:\n{_format_events(events)}\n\nTo-do:\n{_format_todos(todos)}"
     if kind == "afternoon":
+        if todos is None:
+            return "Heads up -- I couldn't load your to-do list from Notion just now, so I can't tell you what's still outstanding today."
         if not todos:
             return "Nice work -- nothing outstanding on your to-do list right now!"
         return f"Still outstanding today:\n{_format_todos(todos)}"
