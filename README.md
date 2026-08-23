@@ -1,4 +1,4 @@
-<img src="Clara_Personal_messaging_agent_icon.jpeg" width="50">
+<img src="Clara_Personal_messaging_Agent_icon.jpeg" width="50">
 
 # Clara — your SMS scheduling agent
 
