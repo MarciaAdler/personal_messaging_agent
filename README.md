@@ -1,3 +1,5 @@
+<img src="Clara_Personal_messaging_agent_icon.jpeg" width="50">
+
 # Clara — your SMS scheduling agent
 
 Clara reads your Google Calendar (read-only) and Notion to-do list, texts you a morning
